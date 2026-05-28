@@ -13,6 +13,9 @@ export interface Task {
   status: TaskStatus
   is_completed: boolean
   target_id: string | null
+  position: number | null
+  deleted_at: string | null
+  deleted_reason: string | null
   created_at: string
   updated_at: string
 }
@@ -22,6 +25,7 @@ export interface Target {
   user_id: string
   title: string
   description: string | null
+  deleted_at: string | null
   created_at: string
   updated_at: string
   tasks?: Task[]

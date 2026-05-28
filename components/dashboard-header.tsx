@@ -90,6 +90,17 @@ export function DashboardHeader() {
             >
               Targets
             </Link>
+            <Link
+              href="/recycle-bin"
+              className={cn(
+                "transition-colors hover:text-foreground py-1 relative",
+                pathname?.startsWith('/recycle-bin')
+                  ? "text-foreground font-semibold border-b-2 border-emerald-500"
+                  : "text-muted-foreground"
+              )}
+            >
+              Recycle Bin
+            </Link>
           </nav>
         </div>
 

@@ -60,7 +60,7 @@ export function DayView({ tasks, selectedDate, targets, isLoading }: DayViewProp
               </h3>
               <div className="flex flex-col gap-2">
                 {pendingTasks.map(task => (
-                  <TaskItem key={task.id} task={task} />
+                  <TaskItem key={task.id} task={task} targets={targets} />
                 ))}
               </div>
             </div>
@@ -74,7 +74,7 @@ export function DayView({ tasks, selectedDate, targets, isLoading }: DayViewProp
               </h3>
               <div className="flex flex-col gap-2">
                 {completedTasks.map(task => (
-                  <TaskItem key={task.id} task={task} />
+                  <TaskItem key={task.id} task={task} targets={targets} />
                 ))}
               </div>
             </div>

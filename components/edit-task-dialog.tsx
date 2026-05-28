@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Task, Priority, TaskType } from '@/lib/types'
+import { Task, Priority, TaskType, Target } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,15 +20,17 @@ import { toast } from 'sonner'
 
 interface EditTaskDialogProps {
   task: Task
+  targets?: Target[]
 }
 
-export function EditTaskDialog({ task }: EditTaskDialogProps) {
+export function EditTaskDialog({ task, targets = [] }: EditTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
   const [dueDate, setDueDate] = useState<Date | undefined>(parseISO(task.due_date))
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [taskType, setTaskType] = useState<TaskType>(task.task_type)
+  const [targetId, setTargetId] = useState<string>(task.target_id || 'none')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
@@ -41,6 +43,7 @@ export function EditTaskDialog({ task }: EditTaskDialogProps) {
       setDueDate(parseISO(task.due_date))
       setPriority(task.priority)
       setTaskType(task.task_type)
+      setTargetId(task.target_id || 'none')
       setError(null)
     }
     setOpen(nextOpen)
@@ -52,15 +55,55 @@ export function EditTaskDialog({ task }: EditTaskDialogProps) {
 
     setIsLoading(true)
     setError(null)
+
+    const updatedFields = {
+      title: title.trim(),
+      description: description.trim() || null,
+      due_date: format(dueDate, 'yyyy-MM-dd'),
+      priority,
+      task_type: taskType,
+      target_id: targetId === 'none' ? null : targetId,
+    }
+
     try {
-      await updateTask(task.id, {
-        title: title.trim(),
-        description: description.trim() || null,
-        due_date: format(dueDate, 'yyyy-MM-dd'),
-        priority,
-        task_type: taskType,
-      })
+      // Optimistic update for SWR caches
+      const updateTaskList = (oldTasks: Task[] | undefined) => {
+        if (!oldTasks) return []
+        return oldTasks.map((t) => (t.id === task.id ? { ...t, ...updatedFields } : t))
+      }
+
+      mutate('all-tasks', updateTaskList, { revalidate: false })
+      mutate((key: string) => typeof key === 'string' && key.includes('tasks'), updateTaskList, { revalidate: false })
+
+      mutate(
+        'targets',
+        (oldTargets: Target[] | undefined) => {
+          if (!oldTargets) return []
+          return oldTargets.map((t) => {
+            let newTasks = t.tasks || []
+            const hadTask = newTasks.some((x) => x.id === task.id)
+            const shouldHaveTask = targetId === t.id
+
+            if (hadTask && !shouldHaveTask) {
+              newTasks = newTasks.filter((x) => x.id !== task.id)
+            } else if (!hadTask && shouldHaveTask) {
+              newTasks = [...newTasks, { ...task, ...updatedFields } as Task]
+            } else if (hadTask && shouldHaveTask) {
+              newTasks = newTasks.map((x) => (x.id === task.id ? ({ ...x, ...updatedFields } as Task) : x))
+            }
+            return { ...t, tasks: newTasks }
+          })
+        },
+        { revalidate: false }
+      )
+
+      await updateTask(task.id, updatedFields)
+
+      // Revalidate to sync with DB
+      mutate('all-tasks')
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))
+      mutate('targets')
+
       toast.success('Changes saved successfully!')
       setOpen(false)
     } catch (err: unknown) {
@@ -187,6 +230,26 @@ export function EditTaskDialog({ task }: EditTaskDialogProps) {
               </Select>
             </div>
           </div>
+
+          {/* Link to Target Selector */}
+          {targets.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Link to Target (optional)</Label>
+              <Select value={targetId} onValueChange={(v) => setTargetId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a target..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {targets.map((target) => (
+                    <SelectItem key={target.id} value={target.id}>
+                      {target.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Error */}
           {error && (

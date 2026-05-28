@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Task } from '@/lib/types'
+import { Target, Task } from '@/lib/types'
 import { TaskItem } from './task-item'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Search, ListTodo, CheckCircle2, Clock, AlertTriangle, Activity } from 'lucide-react'
 import { isPast, isToday } from 'date-fns'
-import { parseLocalDate } from '@/lib/utils'
+import { cn, parseLocalDate } from '@/lib/utils'
 
 export type FilterType = 'all' | 'pending' | 'in-progress' | 'completed' | 'overdue'
 
@@ -18,10 +18,12 @@ interface AllTasksViewProps {
   isLoading: boolean
   filter: FilterType
   onFilterChange: (filter: FilterType) => void
+  targets?: Target[]
 }
 
-export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTasksViewProps) {
+export function AllTasksView({ tasks, isLoading, filter, onFilterChange, targets = [] }: AllTasksViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [targetFilter, setTargetFilter] = useState<string>('all')
 
   // Calculate task counts for each filter
   const counts = useMemo(() => {
@@ -41,7 +43,7 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTa
     }
   }, [tasks])
 
-  // Filter tasks based on selected status and search query
+  // Filter tasks based on selected status, target, and search query
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       // 1. Status Filter
@@ -56,7 +58,11 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTa
         if (!isTaskOverdue) return false
       }
 
-      // 2. Search query filter
+      // 2. Target Filter
+      if (targetFilter === 'unassigned' && task.target_id !== null) return false
+      if (targetFilter !== 'all' && targetFilter !== 'unassigned' && task.target_id !== targetFilter) return false
+
+      // 3. Search query filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
         const titleMatch = task.title.toLowerCase().includes(query)
@@ -66,7 +72,7 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTa
 
       return true
     })
-  }, [tasks, filter, searchQuery])
+  }, [tasks, filter, targetFilter, searchQuery])
 
   if (isLoading) {
     return (
@@ -83,84 +89,131 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTa
   return (
     <div className="flex flex-col gap-6">
       {/* Search and Filters Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* Filter Badges */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={filter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onFilterChange('all')}
+              className="gap-2"
+            >
+              <ListTodo className="h-4 w-4" />
+              All
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                {counts.all}
+              </Badge>
+            </Button>
+
+            <Button
+              variant={filter === 'pending' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onFilterChange('pending')}
+              className="gap-2"
+            >
+              <Clock className="h-4 w-4 text-amber-500" />
+              Pending
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                {counts.pending}
+              </Badge>
+            </Button>
+
+            <Button
+              variant={filter === 'in-progress' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onFilterChange('in-progress')}
+              className="gap-2"
+            >
+              <Activity className="h-4 w-4 text-sky-500" />
+              In Progress
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                {counts.inProgress}
+              </Badge>
+            </Button>
+
+            <Button
+              variant={filter === 'completed' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onFilterChange('completed')}
+              className="gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Completed
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                {counts.completed}
+              </Badge>
+            </Button>
+
+            <Button
+              variant={filter === 'overdue' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onFilterChange('overdue')}
+              className="gap-2"
+            >
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              Overdue
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                {counts.overdue}
+              </Badge>
+            </Button>
+          </div>
         </div>
 
-        {/* Filter Badges */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={filter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onFilterChange('all')}
-            className="gap-2"
-          >
-            <ListTodo className="h-4 w-4" />
-            All
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              {counts.all}
-            </Badge>
-          </Button>
-
-          <Button
-            variant={filter === 'pending' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onFilterChange('pending')}
-            className="gap-2"
-          >
-            <Clock className="h-4 w-4 text-amber-500" />
-            Pending
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              {counts.pending}
-            </Badge>
-          </Button>
-
-          <Button
-            variant={filter === 'in-progress' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onFilterChange('in-progress')}
-            className="gap-2"
-          >
-            <Activity className="h-4 w-4 text-sky-500" />
-            In Progress
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              {counts.inProgress}
-            </Badge>
-          </Button>
-
-          <Button
-            variant={filter === 'completed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onFilterChange('completed')}
-            className="gap-2"
-          >
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            Completed
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              {counts.completed}
-            </Badge>
-          </Button>
-
-          <Button
-            variant={filter === 'overdue' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onFilterChange('overdue')}
-            className="gap-2"
-          >
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            Overdue
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              {counts.overdue}
-            </Badge>
-          </Button>
+        {/* Target Filter Pills */}
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Filter by Goal/Target:
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              variant={targetFilter === 'all' ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setTargetFilter('all')}
+              className={cn(
+                "h-7 text-xs px-2.5 rounded-full",
+                targetFilter === 'all' && "bg-primary text-primary-foreground hover:bg-primary/95"
+              )}
+            >
+              All Goals/Daily
+            </Button>
+            <Button
+              variant={targetFilter === 'unassigned' ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setTargetFilter('unassigned')}
+              className={cn(
+                "h-7 text-xs px-2.5 rounded-full",
+                targetFilter === 'unassigned' && "bg-primary text-primary-foreground hover:bg-primary/95"
+              )}
+            >
+              Daily Tasks (No Target)
+            </Button>
+            {targets.map(t => (
+              <Button
+                key={t.id}
+                variant={targetFilter === t.id ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={() => setTargetFilter(t.id)}
+                className={cn(
+                  "h-7 text-xs px-2.5 rounded-full",
+                  targetFilter === t.id && "bg-primary text-primary-foreground hover:bg-primary/95"
+                )}
+              >
+                Goal: {t.title}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -173,14 +226,14 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange }: AllTa
             <p className="text-sm text-muted-foreground max-w-sm mt-1">
               {searchQuery
                 ? `No tasks match search "${searchQuery}". Try refining your query.`
-                : `There are no ${filter === 'all' ? '' : filter} tasks currently.`}
+                : `There are no ${filter === 'all' ? '' : filter} tasks currently for this target filter.`}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
           {filteredTasks.map((task) => (
-            <TaskItem key={task.id} task={task} />
+            <TaskItem key={task.id} task={task} targets={targets} />
           ))}
         </div>
       )}

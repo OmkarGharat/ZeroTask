@@ -15,10 +15,12 @@ export function useTasks(startDate: Date, endDate: Date) {
     const { data, error } = await supabase()
       .from('tasks')
       .select('*')
+      .is('deleted_at', null)
       .gte('due_date', format(startDate, 'yyyy-MM-dd'))
       .lte('due_date', format(endDate, 'yyyy-MM-dd'))
       .order('due_date', { ascending: true })
-      .order('priority', { ascending: true })
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
     
     if (error) throw error
     return data as Task[]
@@ -31,7 +33,10 @@ export function useAllTasks() {
     const { data, error } = await supabase()
       .from('tasks')
       .select('*')
+      .is('deleted_at', null)
       .order('due_date', { ascending: true })
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
     
     if (error) throw error
     return data as Task[]
@@ -44,6 +49,7 @@ export function useTargets() {
     const { data: targets, error: targetsError } = await supabase()
       .from('targets')
       .select('*')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
     
     if (targetsError) throw targetsError
@@ -51,7 +57,10 @@ export function useTargets() {
     const { data: tasks, error: tasksError } = await supabase()
       .from('tasks')
       .select('*')
+      .is('deleted_at', null)
       .not('target_id', 'is', null)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
     
     if (tasksError) throw tasksError
 
@@ -65,14 +74,50 @@ export function useTargets() {
   })
 }
 
+// Fetch deleted tasks for Recycle Bin
+export function useDeletedTasks() {
+  return useSWR('deleted-tasks', async () => {
+    const { data, error } = await supabase()
+      .from('tasks')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+    
+    if (error) throw error
+    return data as Task[]
+  })
+}
+
+// Fetch deleted targets for Recycle Bin
+export function useDeletedTargets() {
+  return useSWR('deleted-targets', async () => {
+    const { data, error } = await supabase()
+      .from('targets')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+    
+    if (error) throw error
+    return data as Target[]
+  })
+}
+
 // Create a new task
 export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
   const { data: { user } } = await supabase().auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
+  // Default position is the current epoch to place it at the bottom
+  const defaultPosition = Date.now()
+
   const { data, error } = await supabase()
     .from('tasks')
-    .insert({ status: 'pending', ...task, user_id: user.id })
+    .insert({ 
+      status: 'pending', 
+      position: defaultPosition, 
+      ...task, 
+      user_id: user.id 
+    })
     .select()
     .single()
 
@@ -93,8 +138,34 @@ export async function updateTask(id: string, updates: Partial<Task>) {
   return data as Task
 }
 
-// Delete a task
-export async function deleteTask(id: string) {
+// Soft delete a task
+export async function deleteTask(id: string, reason: string | null = null) {
+  const { error } = await supabase()
+    .from('tasks')
+    .update({ 
+      deleted_at: new Date().toISOString(),
+      deleted_reason: reason
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Restore a soft-deleted task
+export async function restoreTask(id: string) {
+  const { error } = await supabase()
+    .from('tasks')
+    .update({ 
+      deleted_at: null,
+      deleted_reason: null
+    })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Permanently delete a task
+export async function permanentDeleteTask(id: string) {
   const { error } = await supabase()
     .from('tasks')
     .delete()
@@ -131,14 +202,70 @@ export async function updateTarget(id: string, updates: Partial<Target>) {
   return data as Target
 }
 
-// Delete a target
+// Soft delete a target and its tasks
 export async function deleteTarget(id: string) {
-  const { error } = await supabase()
+  const now = new Date().toISOString()
+
+  // First soft-delete all tasks inside the target
+  const { error: tasksError } = await supabase()
+    .from('tasks')
+    .update({ 
+      deleted_at: now,
+      deleted_reason: 'Target deleted'
+    })
+    .eq('target_id', id)
+
+  if (tasksError) throw tasksError
+
+  // Soft-delete the target itself
+  const { error: targetError } = await supabase()
+    .from('targets')
+    .update({ deleted_at: now })
+    .eq('id', id)
+
+  if (targetError) throw targetError
+}
+
+// Restore a soft-deleted target
+export async function restoreTarget(id: string) {
+  // Restore the target itself
+  const { error: targetError } = await supabase()
+    .from('targets')
+    .update({ deleted_at: null })
+    .eq('id', id)
+
+  if (targetError) throw targetError
+
+  // Restore tasks that were soft-deleted because the target was deleted
+  const { error: tasksError } = await supabase()
+    .from('tasks')
+    .update({ 
+      deleted_at: null,
+      deleted_reason: null
+    })
+    .eq('target_id', id)
+    .eq('deleted_reason', 'Target deleted')
+
+  if (tasksError) throw tasksError
+}
+
+// Permanently delete a target
+export async function permanentDeleteTarget(id: string) {
+  // First permanently delete or unlink all tasks under this target (unlinking is safer, or delete if soft-deleted)
+  const { error: tasksError } = await supabase()
+    .from('tasks')
+    .delete()
+    .eq('target_id', id)
+
+  if (tasksError) throw tasksError
+
+  // Permanently delete the target itself
+  const { error: targetError } = await supabase()
     .from('targets')
     .delete()
     .eq('id', id)
 
-  if (error) throw error
+  if (targetError) throw targetError
 }
 
 // Helper functions for date ranges

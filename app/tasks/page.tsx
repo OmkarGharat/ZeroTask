@@ -136,6 +136,7 @@ function TasksWorkspace() {
             isLoading={allTasksLoading && viewMode === 'all'}
             filter={listFilter}
             onFilterChange={setListFilter}
+            targets={targets}
           />
         </div>
       </div>

@@ -1,14 +1,16 @@
 'use client'
 
-import { Task, Priority, TaskStatus } from '@/lib/types'
+import { useState } from 'react'
+import { Task, Priority, TaskStatus, Target } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Trash2, GripVertical, Target } from 'lucide-react'
+import { Trash2, GripVertical, Target as TargetIcon } from 'lucide-react'
 import { updateTask, deleteTask } from '@/lib/data'
 import { useSWRConfig } from 'swr'
 import { cn } from '@/lib/utils'
 import { EditTaskDialog } from '@/components/edit-task-dialog'
+import { DeleteConfirmDialog } from '@/components/delete-confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +21,10 @@ import {
 interface TaskItemProps {
   task: Task
   showDate?: boolean
+  targets?: Target[]
+  showSelection?: boolean
+  isSelected?: boolean
+  onSelectChange?: (checked: boolean) => void
 }
 
 const priorityDotColors: Record<Priority, string> = {
@@ -42,8 +48,16 @@ const statusConfigs = {
   },
 }
 
-export function TaskItem({ task, showDate }: TaskItemProps) {
+export function TaskItem({
+  task,
+  showDate,
+  targets = [],
+  showSelection = false,
+  isSelected = false,
+  onSelectChange,
+}: TaskItemProps) {
   const { mutate } = useSWRConfig()
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const isCompleted = task.status === 'completed'
 
   const handleToggleComplete = async () => {
@@ -53,7 +67,9 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
         is_completed: nextCompleted,
         status: nextCompleted ? 'completed' : 'pending'
       })
+      // Trigger full invalidation of tasks and targets to keep progress bars updated
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))
+      mutate('targets')
     } catch (error) {
       console.error('Failed to update task:', error)
     }
@@ -66,116 +82,140 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
         is_completed: newStatus === 'completed'
       })
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))
+      mutate('targets')
     } catch (error) {
       console.error('Failed to change status:', error)
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     try {
       await deleteTask(task.id)
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))
+      mutate('targets')
     } catch (error) {
       console.error('Failed to delete task:', error)
     }
   }
 
   return (
-    <div
-      className={cn(
-        'group flex items-center gap-3 rounded-lg border bg-card p-3',
-        // Smooth transition for all visual state changes
-        'transition-[opacity,background-color,border-color,border-left-width] duration-300 ease-in-out',
-        isCompleted
-          ? 'bg-muted/40 opacity-55 border-border'
-          : task.status === 'in-progress'
-          ? 'border-l-4 border-l-sky-500 bg-sky-500/5 border-border hover:shadow-sm'
-          : 'border-border hover:shadow-sm'
-      )}
-    >
-      <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      
-      <Checkbox
-        checked={isCompleted}
-        onCheckedChange={handleToggleComplete}
+    <>
+      <div
         className={cn(
-          'h-5 w-5 transition-all duration-300',
-          isCompleted && 'opacity-60'
+          'group flex items-center gap-3 rounded-lg border bg-card p-3',
+          'transition-[opacity,background-color,border-color,border-left-width] duration-300 ease-in-out',
+          isCompleted
+            ? 'bg-muted/40 opacity-55 border-border'
+            : task.status === 'in-progress'
+            ? 'border-l-4 border-l-sky-500 bg-sky-500/5 border-border hover:shadow-sm'
+            : 'border-border hover:shadow-sm'
         )}
-      />
-      
-      <div className="flex flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              'font-medium text-card-foreground transition-all duration-300',
-              isCompleted && 'line-through text-muted-foreground'
-            )}
-          >
-            {task.title}
-          </span>
-          {task.target_id && (
-            <Target className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </div>
-        {task.description && (
-          <p className="text-sm text-muted-foreground line-clamp-1">
-            {task.description}
-          </p>
+      >
+        {/* Multi-selection Checkbox */}
+        {showSelection && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onSelectChange?.(!!checked)}
+            className="h-5 w-5 border-primary/40 data-[state=checked]:bg-primary"
+          />
         )}
-        <div className="flex flex-wrap items-center gap-2 mt-1">
-          {/* Status Dropdown Badge */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "cursor-pointer transition-colors duration-200 px-1.5 py-0 text-[10px] font-medium rounded border",
-                  statusConfigs[task.status]?.className
-                )}
-              >
-                {statusConfigs[task.status]?.label}
-              </Badge>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleStatusChange('pending')}>
-                Mark Pending
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange('in-progress')}>
-                Mark In Progress
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange('completed')}>
-                Mark Completed
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          <div className="flex items-center gap-1.5">
-            <div className={cn('h-2 w-2 rounded-full transition-colors duration-300', priorityDotColors[task.priority])} />
-            <span className="text-xs text-muted-foreground capitalize">{task.priority}</span>
-          </div>
-          <Badge variant="outline" className="text-xs px-1 py-0">
-            {task.task_type === 'long-term' ? 'Long-term' : 'Short-term'}
-          </Badge>
-          {showDate && (
-            <span className="text-xs text-muted-foreground">
-              {task.due_date}
+        <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+        
+        {/* Completion Checkbox */}
+        <Checkbox
+          checked={task.is_completed}
+          onCheckedChange={handleToggleComplete}
+          className={cn(
+            'h-5 w-5 transition-all duration-300',
+            isCompleted && 'opacity-60'
+          )}
+        />
+        
+        <div className="flex flex-1 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'font-medium text-card-foreground transition-all duration-300',
+                isCompleted && 'line-through text-muted-foreground'
+              )}
+            >
+              {task.title}
             </span>
+            {task.target_id && (
+              <TargetIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </div>
+          {task.description && (
+            <p className="text-sm text-muted-foreground line-clamp-1">
+              {task.description}
+            </p>
           )}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {/* Status Dropdown Badge */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "cursor-pointer transition-colors duration-200 px-1.5 py-0 text-[10px] font-medium rounded border",
+                    statusConfigs[task.status]?.className
+                  )}
+                >
+                  {statusConfigs[task.status]?.label}
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => handleStatusChange('pending')}>
+                  Mark Pending
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStatusChange('in-progress')}>
+                  Mark In Progress
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStatusChange('completed')}>
+                  Mark Completed
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-1.5">
+              <div className={cn('h-2 w-2 rounded-full transition-colors duration-300', priorityDotColors[task.priority])} />
+              <span className="text-xs text-muted-foreground capitalize">{task.priority}</span>
+            </div>
+            <Badge variant="outline" className="text-xs px-1 py-0">
+              {task.task_type === 'long-term' ? 'Long-term' : 'Short-term'}
+            </Badge>
+            {showDate && (
+              <span className="text-xs text-muted-foreground">
+                {task.due_date}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <EditTaskDialog task={task} targets={targets} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsDeleteDialogOpen(true)
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
-        <EditTaskDialog task={task} />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-          onClick={handleDelete}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
+      <DeleteConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        task={task}
+      />
+    </>
   )
 }
+
