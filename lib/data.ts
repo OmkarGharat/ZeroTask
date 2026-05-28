@@ -5,14 +5,14 @@ import { Task, Target } from '@/lib/types'
 import useSWR from 'swr'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isSameDay, parseISO, isWithinInterval } from 'date-fns'
 
-const supabase = createClient()
+const supabase = () => createClient()
 
 // Fetch tasks for a date range
 export function useTasks(startDate: Date, endDate: Date) {
   const key = `tasks-${format(startDate, 'yyyy-MM-dd')}-${format(endDate, 'yyyy-MM-dd')}`
   
   return useSWR(key, async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabase()
       .from('tasks')
       .select('*')
       .gte('due_date', format(startDate, 'yyyy-MM-dd'))
@@ -28,7 +28,7 @@ export function useTasks(startDate: Date, endDate: Date) {
 // Fetch all tasks
 export function useAllTasks() {
   return useSWR('all-tasks', async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabase()
       .from('tasks')
       .select('*')
       .order('due_date', { ascending: true })
@@ -41,14 +41,14 @@ export function useAllTasks() {
 // Fetch targets with their tasks
 export function useTargets() {
   return useSWR('targets', async () => {
-    const { data: targets, error: targetsError } = await supabase
+    const { data: targets, error: targetsError } = await supabase()
       .from('targets')
       .select('*')
       .order('created_at', { ascending: false })
     
     if (targetsError) throw targetsError
 
-    const { data: tasks, error: tasksError } = await supabase
+    const { data: tasks, error: tasksError } = await supabase()
       .from('tasks')
       .select('*')
       .not('target_id', 'is', null)
@@ -67,10 +67,10 @@ export function useTargets() {
 
 // Create a new task
 export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase().auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase()
     .from('tasks')
     .insert({ status: 'pending', ...task, user_id: user.id })
     .select()
@@ -82,7 +82,7 @@ export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'created_at
 
 // Update a task
 export async function updateTask(id: string, updates: Partial<Task>) {
-  const { data, error } = await supabase
+  const { data, error } = await supabase()
     .from('tasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -95,7 +95,7 @@ export async function updateTask(id: string, updates: Partial<Task>) {
 
 // Delete a task
 export async function deleteTask(id: string) {
-  const { error } = await supabase
+  const { error } = await supabase()
     .from('tasks')
     .delete()
     .eq('id', id)
@@ -105,10 +105,10 @@ export async function deleteTask(id: string) {
 
 // Create a new target
 export async function createTarget(target: Omit<Target, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'tasks'>) {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase().auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase()
     .from('targets')
     .insert({ ...target, user_id: user.id })
     .select()
@@ -120,7 +120,7 @@ export async function createTarget(target: Omit<Target, 'id' | 'user_id' | 'crea
 
 // Update a target
 export async function updateTarget(id: string, updates: Partial<Target>) {
-  const { data, error } = await supabase
+  const { data, error } = await supabase()
     .from('targets')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -133,7 +133,7 @@ export async function updateTarget(id: string, updates: Partial<Target>) {
 
 // Delete a target
 export async function deleteTarget(id: string) {
-  const { error } = await supabase
+  const { error } = await supabase()
     .from('targets')
     .delete()
     .eq('id', id)
