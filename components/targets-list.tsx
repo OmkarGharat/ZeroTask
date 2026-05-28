@@ -4,8 +4,7 @@ import { Target } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
-import { Trash2, ChevronDown, ChevronUp, Target as TargetIcon, Plus } from 'lucide-react'
+import { Trash2, ChevronDown, Target as TargetIcon, Plus } from 'lucide-react'
 import { deleteTarget, getTargetProgress } from '@/lib/data'
 import { TaskItem } from './task-item'
 import { AddTaskDialog } from './add-task-dialog'
@@ -51,18 +50,37 @@ function TargetCard({ target, allTargets }: TargetCardProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Add Subtask button */}
+            <AddTaskDialog
+              targets={allTargets}
+              defaultTargetId={target.id}
+              triggerButton={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs px-2.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Subtask
+                </Button>
+              }
+            />
+
+            {/* Expand/Collapse chevron */}
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              {isExpanded ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 transition-transform duration-300 ease-in-out',
+                  isExpanded ? 'rotate-0' : '-rotate-90'
+                )}
+              />
             </Button>
+
             <Button
               variant="ghost"
               size="icon"
@@ -85,21 +103,29 @@ function TargetCard({ target, allTargets }: TargetCardProps) {
         </div>
       </CardHeader>
 
-      {isExpanded && (
-        <CardContent className="border-t pt-4">
-          {target.tasks && target.tasks.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {target.tasks.map(task => (
-                <TaskItem key={task.id} task={task} showDate />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No subtasks yet. Add tasks and link them to this target.
-            </p>
-          )}
-        </CardContent>
-      )}
+      {/* Animated expand/collapse using CSS grid trick */}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-300 ease-in-out',
+          isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <CardContent className="border-t pt-4">
+            {target.tasks && target.tasks.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {target.tasks.map(task => (
+                  <TaskItem key={task.id} task={task} showDate />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No subtasks yet. Click &ldquo;Add Subtask&rdquo; to link tasks to this target.
+              </p>
+            )}
+          </CardContent>
+        </div>
+      </div>
     </Card>
   )
 }
@@ -112,8 +138,10 @@ interface TargetsListProps {
 export function TargetsList({ targets, isLoading }: TargetsListProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-pulse text-muted-foreground">Loading targets...</div>
+      <div className="flex flex-col gap-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-36 animate-pulse rounded-xl bg-muted/20 border border-border" />
+        ))}
       </div>
     )
   }
@@ -122,7 +150,7 @@ export function TargetsList({ targets, isLoading }: TargetsListProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Targets & Goals</h2>
+          <h2 className="text-xl font-semibold text-foreground">Targets &amp; Goals</h2>
           <p className="text-sm text-muted-foreground">
             Track your long-term goals with subtasks
           </p>

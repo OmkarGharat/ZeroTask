@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Task, Priority, TaskType, Target } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,19 +21,22 @@ import { toast } from 'sonner'
 interface AddTaskDialogProps {
   targets?: Target[]
   defaultDate?: Date
+  defaultTargetId?: string
+  triggerButton?: React.ReactNode
 }
 
-export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps) {
+export function AddTaskDialog({ targets = [], defaultDate, defaultTargetId, triggerButton }: AddTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState<Date | undefined>(defaultDate || new Date())
   const [priority, setPriority] = useState<Priority>('medium')
   const [taskType, setTaskType] = useState<TaskType>('short-term')
-  const [targetId, setTargetId] = useState<string | null>(null)
+  const [targetId, setTargetId] = useState<string>(defaultTargetId || 'none')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
+  const formRef = useRef<HTMLFormElement>(null)
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -42,14 +45,14 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
       setDueDate(defaultDate || new Date())
       setPriority('medium')
       setTaskType('short-term')
-      setTargetId(null)
+      setTargetId(defaultTargetId || 'none')
       setError(null)
     }
     setOpen(nextOpen)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!title || !dueDate) return
 
     setIsLoading(true)
@@ -62,21 +65,22 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
         priority,
         task_type: taskType,
         is_completed: false,
-        target_id: targetId,
+        target_id: targetId === 'none' ? null : targetId,
+        status: 'pending'
       })
-      
+
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))
       mutate('targets')
-      
-      toast.success('Task created successfully!')
-      
+
+      toast.success('Task created!')
+
       // Reset form
       setTitle('')
       setDescription('')
       setDueDate(defaultDate || new Date())
       setPriority('medium')
       setTaskType('short-term')
-      setTargetId(null)
+      setTargetId(defaultTargetId || 'none')
       setOpen(false)
     } catch (error: unknown) {
       const msg =
@@ -87,24 +91,41 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
       console.error('Failed to create task — message:', msg, '| code:', code, '| raw:', error)
       setError(`Failed to create task: ${msg}`)
     } finally {
-
       setIsLoading(false)
     }
   }
 
+  // Ctrl+Enter / Cmd+Enter to submit
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!open) return
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        handleSubmit()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, title, dueDate, priority, taskType, targetId, description])
+
+  const showTargetSelector = targets.length > 0
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Task
-        </Button>
+        {triggerButton ?? (
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Task
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add New Task</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
           <div className="grid gap-2">
             <Label htmlFor="title">Title</Label>
             <Input
@@ -113,6 +134,7 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
+              autoFocus
             />
           </div>
 
@@ -197,15 +219,15 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
             </div>
           </div>
 
-          {targets.length > 0 && (
+          {showTargetSelector && (
             <div className="grid gap-2">
               <Label>Link to Target (optional)</Label>
-              <Select value={targetId || ''} onValueChange={(v) => setTargetId(v || null)}>
+              <Select value={targetId} onValueChange={(v) => setTargetId(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a target..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {targets.map((target) => (
                     <SelectItem key={target.id} value={target.id}>
                       {target.title}
@@ -219,9 +241,17 @@ export function AddTaskDialog({ targets = [], defaultDate }: AddTaskDialogProps)
           {error && (
             <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{error}</p>
           )}
-          <Button type="submit" className="mt-2" disabled={isLoading}>
-            {isLoading ? 'Adding...' : 'Add Task'}
-          </Button>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-muted-foreground select-none">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl</kbd>
+              {' + '}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">↵</kbd>
+              {' to submit'}
+            </span>
+            <Button type="submit" disabled={isLoading || !title.trim()}>
+              {isLoading ? 'Adding...' : 'Add Task'}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

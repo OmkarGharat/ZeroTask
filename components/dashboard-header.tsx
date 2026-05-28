@@ -79,6 +79,17 @@ export function DashboardHeader() {
             >
               Tasks
             </Link>
+            <Link
+              href="/targets"
+              className={cn(
+                "transition-colors hover:text-foreground py-1 relative",
+                pathname?.startsWith('/targets')
+                  ? "text-foreground font-semibold border-b-2 border-emerald-500"
+                  : "text-muted-foreground"
+              )}
+            >
+              Targets
+            </Link>
           </nav>
         </div>
 

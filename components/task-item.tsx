@@ -21,12 +21,6 @@ interface TaskItemProps {
   showDate?: boolean
 }
 
-const priorityColors: Record<Priority, string> = {
-  high: 'bg-red-500/10 text-red-600 border-red-200',
-  medium: 'bg-amber-500/10 text-amber-600 border-amber-200',
-  low: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-}
-
 const priorityDotColors: Record<Priority, string> = {
   high: 'bg-red-500',
   medium: 'bg-amber-500',
@@ -50,6 +44,7 @@ const statusConfigs = {
 
 export function TaskItem({ task, showDate }: TaskItemProps) {
   const { mutate } = useSWRConfig()
+  const isCompleted = task.status === 'completed'
 
   const handleToggleComplete = async () => {
     const nextCompleted = !task.is_completed
@@ -88,25 +83,33 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
   return (
     <div
       className={cn(
-        'group flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-all hover:shadow-sm',
-        task.status === 'completed' && 'bg-muted/50 opacity-60',
-        task.status === 'in-progress' && 'border-l-4 border-l-sky-500 bg-sky-500/5'
+        'group flex items-center gap-3 rounded-lg border bg-card p-3',
+        // Smooth transition for all visual state changes
+        'transition-[opacity,background-color,border-color,border-left-width] duration-300 ease-in-out',
+        isCompleted
+          ? 'bg-muted/40 opacity-55 border-border'
+          : task.status === 'in-progress'
+          ? 'border-l-4 border-l-sky-500 bg-sky-500/5 border-border hover:shadow-sm'
+          : 'border-border hover:shadow-sm'
       )}
     >
-      <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
       
       <Checkbox
-        checked={task.status === 'completed'}
+        checked={isCompleted}
         onCheckedChange={handleToggleComplete}
-        className="h-5 w-5"
+        className={cn(
+          'h-5 w-5 transition-all duration-300',
+          isCompleted && 'opacity-60'
+        )}
       />
       
       <div className="flex flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              'font-medium text-card-foreground',
-              task.status === 'completed' && 'line-through text-muted-foreground'
+              'font-medium text-card-foreground transition-all duration-300',
+              isCompleted && 'line-through text-muted-foreground'
             )}
           >
             {task.title}
@@ -127,7 +130,7 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
               <Badge
                 variant="outline"
                 className={cn(
-                  "cursor-pointer transition-colors px-1.5 py-0 text-[10px] font-medium rounded border",
+                  "cursor-pointer transition-colors duration-200 px-1.5 py-0 text-[10px] font-medium rounded border",
                   statusConfigs[task.status]?.className
                 )}
               >
@@ -148,7 +151,7 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
           </DropdownMenu>
 
           <div className="flex items-center gap-1.5">
-            <div className={cn('h-2 w-2 rounded-full', priorityDotColors[task.priority])} />
+            <div className={cn('h-2 w-2 rounded-full transition-colors duration-300', priorityDotColors[task.priority])} />
             <span className="text-xs text-muted-foreground capitalize">{task.priority}</span>
           </div>
           <Badge variant="outline" className="text-xs px-1 py-0">
@@ -167,7 +170,7 @@ export function TaskItem({ task, showDate }: TaskItemProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+          className="h-8 w-8 opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
           onClick={handleDelete}
         >
           <Trash2 className="h-4 w-4" />
