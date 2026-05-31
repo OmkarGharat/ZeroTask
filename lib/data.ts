@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { Task, Target } from '@/lib/types'
 import useSWR from 'swr'
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isSameDay, parseISO, isWithinInterval } from 'date-fns'
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isSameDay, parseISO } from 'date-fns'
 
 const supabase = () => createClient()
 
@@ -103,7 +103,7 @@ export function useDeletedTargets() {
 }
 
 // Create a new task
-export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
+export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'status' | 'is_completed' | 'completed_at' | 'position' | 'deleted_at' | 'deleted_reason' | 'created_at' | 'updated_at'>) {
   const { data: { user } } = await supabase().auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
@@ -127,9 +127,26 @@ export async function createTask(task: Omit<Task, 'id' | 'user_id' | 'created_at
 
 // Update a task
 export async function updateTask(id: string, updates: Partial<Task>) {
+  // Auto-manage completed_at based on is_completed flag or status change
+  const resolvedUpdates = { ...updates }
+  if ('is_completed' in updates || 'status' in updates) {
+    const isNowCompleted =
+      updates.is_completed === true || updates.status === 'completed'
+    const isNowUncompleted =
+      updates.is_completed === false ||
+      updates.status === 'pending' ||
+      updates.status === 'in-progress'
+
+    if (isNowCompleted && !('completed_at' in updates)) {
+      resolvedUpdates.completed_at = new Date().toISOString()
+    } else if (isNowUncompleted && !('completed_at' in updates)) {
+      resolvedUpdates.completed_at = null
+    }
+  }
+
   const { data, error } = await supabase()
     .from('tasks')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({ ...resolvedUpdates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()

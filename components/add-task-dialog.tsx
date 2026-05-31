@@ -64,9 +64,7 @@ export function AddTaskDialog({ targets = [], defaultDate, defaultTargetId, trig
         due_date: format(dueDate, 'yyyy-MM-dd'),
         priority,
         task_type: taskType,
-        is_completed: false,
         target_id: targetId === 'none' ? null : targetId,
-        status: 'pending'
       })
 
       mutate((key: string) => typeof key === 'string' && key.includes('tasks'))

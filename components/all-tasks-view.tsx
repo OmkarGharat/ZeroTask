@@ -233,7 +233,7 @@ export function AllTasksView({ tasks, isLoading, filter, onFilterChange, targets
       ) : (
         <div className="flex flex-col gap-2">
           {filteredTasks.map((task) => (
-            <TaskItem key={task.id} task={task} targets={targets} />
+            <TaskItem key={task.id} task={task} targets={targets} showDate={true} />
           ))}
         </div>
       )}

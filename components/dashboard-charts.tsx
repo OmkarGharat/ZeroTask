@@ -3,23 +3,31 @@
 import { Task } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
-import { TrendingUp, BarChart3 } from 'lucide-react'
+import { TrendingUp, BarChart3, Clock } from 'lucide-react'
+import { parseISO, startOfDay } from 'date-fns'
+import { parseLocalDate } from '@/lib/utils'
 
 interface DashboardChartsProps {
   tasks: Task[]
   isLoading: boolean
 }
 
+function isTaskCompletedLate(task: Task): boolean {
+  if (!task.is_completed || !task.completed_at || !task.due_date) return false
+  const completedDay = startOfDay(parseISO(task.completed_at))
+  const dueDay = parseLocalDate(task.due_date)
+  return completedDay > dueDay
+}
+
 export function DashboardCharts({ tasks, isLoading }: DashboardChartsProps) {
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="h-[300px] animate-pulse">
-          <CardContent className="h-full bg-muted/20" />
-        </Card>
-        <Card className="h-[300px] animate-pulse">
-          <CardContent className="h-full bg-muted/20" />
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <Card key={i} className="h-[300px] animate-pulse">
+            <CardContent className="h-full bg-muted/20" />
+          </Card>
+        ))}
       </div>
     )
   }
@@ -45,7 +53,7 @@ export function DashboardCharts({ tasks, isLoading }: DashboardChartsProps) {
   const completionData = [
     { name: 'Completed', value: completed, color: 'oklch(0.65 0.18 140)' }, // Emerald
     { name: 'In Progress', value: inProgress, color: 'oklch(0.60 0.16 230)' }, // Sky Blue
-    { name: 'Pending', value: pending, color: 'oklch(0.9 0.02 0 / 0.15)' },  // Muted light grey/border
+    { name: 'Pending', value: pending, color: 'oklch(0.9 0.02 0 / 0.15)' },  // Muted
   ]
 
   // 2. Priority Distribution Calculation
@@ -55,9 +63,23 @@ export function DashboardCharts({ tasks, isLoading }: DashboardChartsProps) {
     { name: 'Low', count: tasks.filter(t => t.priority === 'low').length, fill: 'oklch(0.65 0.18 140)' },
   ]
 
+  // 3. On-Time vs Late Completion Breakdown
+  const completedTasks = tasks.filter(t => t.status === 'completed')
+  const completedOnTime = completedTasks.filter(t => !isTaskCompletedLate(t)).length
+  const completedLate = completedTasks.filter(t => isTaskCompletedLate(t)).length
+  const overdueIncomplete = tasks.filter(
+    t => t.status !== 'completed' && parseLocalDate(t.due_date) < startOfDay(new Date())
+  ).length
+
+  const completionQualityData = [
+    { name: 'On Time', count: completedOnTime, fill: 'oklch(0.65 0.18 140)' },  // Emerald
+    { name: 'Late Done', count: completedLate, fill: 'oklch(0.75 0.15 70)' },    // Amber
+    { name: 'Still Overdue', count: overdueIncomplete, fill: 'oklch(0.55 0.18 20)' }, // Red
+  ]
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {/* Completion Chart */}
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* Completion Rate Chart */}
       <Card>
         <CardHeader className="p-4 pb-2 border-b">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -100,7 +122,7 @@ export function DashboardCharts({ tasks, isLoading }: DashboardChartsProps) {
                   <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Progress</span>
                 </div>
               </div>
-              <div className="flex gap-4 text-xs font-medium text-muted-foreground mt-2">
+              <div className="flex flex-wrap justify-center gap-3 text-xs font-medium text-muted-foreground mt-2">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full bg-[oklch(0.65_0.18_140)]" />
                   Completed ({completed})
@@ -165,6 +187,77 @@ export function DashboardCharts({ tasks, isLoading }: DashboardChartsProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Completion Quality Chart — On-Time vs Late vs Still Overdue */}
+      <Card>
+        <CardHeader className="p-4 pb-2 border-b">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Clock className="h-4 w-4 text-primary" />
+            Completion Quality
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 flex flex-col justify-center min-h-[220px]">
+          {completedTasks.length > 0 || overdueIncomplete > 0 ? (
+            <>
+              <div className="w-full h-[155px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={completionQualityData}
+                    layout="vertical"
+                    margin={{ left: -10, right: 10, top: 5, bottom: 5 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      stroke="var(--muted-foreground)"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      width={72}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'var(--muted)', opacity: 0.15 }}
+                      contentStyle={{
+                        background: 'var(--popover)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '12px',
+                        color: 'var(--foreground)'
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16}>
+                      {completionQualityData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Summary Pills */}
+              <div className="flex flex-wrap justify-center gap-2 mt-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[oklch(0.65_0.18_140)]" />
+                  On Time ({completedOnTime})
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[oklch(0.75_0.15_70)]" />
+                  Late Done ({completedLate})
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[oklch(0.55_0.18_20)]" />
+                  Still Overdue ({overdueIncomplete})
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground gap-2">
+              <Clock className="h-7 w-7 opacity-30" />
+              <p className="text-xs">Complete some tasks to see quality breakdown</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

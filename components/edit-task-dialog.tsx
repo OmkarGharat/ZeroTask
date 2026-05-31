@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { CalendarIcon, Pencil } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { CalendarIcon, Pencil, Lock, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { format, parseISO, startOfDay, differenceInDays } from 'date-fns'
 import { updateTask } from '@/lib/data'
 import { useSWRConfig } from 'swr'
-import { cn } from '@/lib/utils'
+import { cn, parseLocalDate } from '@/lib/utils'
 import { toast } from 'sonner'
 
 
@@ -34,6 +34,26 @@ export function EditTaskDialog({ task, targets = [] }: EditTaskDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { mutate } = useSWRConfig()
+
+  // Determine if the due date is in the past (locked)
+  const isDueDatePast = parseLocalDate(task.due_date) < startOfDay(new Date())
+
+  // Determine if this task was completed late
+  const completedLate =
+    task.is_completed &&
+    task.completed_at &&
+    (() => {
+      const completedDay = startOfDay(parseISO(task.completed_at))
+      const dueDay = parseLocalDate(task.due_date)
+      return completedDay > dueDay
+    })()
+  const daysLate =
+    completedLate && task.completed_at
+      ? differenceInDays(
+          startOfDay(parseISO(task.completed_at)),
+          parseLocalDate(task.due_date)
+        )
+      : 0
 
   // Reset form to task's current values whenever dialog opens
   const handleOpenChange = (nextOpen: boolean) => {
@@ -129,12 +149,44 @@ export function EditTaskDialog({ task, targets = [] }: EditTaskDialogProps) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle>Edit Task</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
+        {/* Completed Late Info Banner */}
+        {completedLate && task.completed_at && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-500/8 dark:bg-amber-500/10 px-3 py-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                Completed {daysLate} day{daysLate !== 1 ? 's' : ''} late
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Due: <span className="font-medium">{format(parseLocalDate(task.due_date), 'MMM d, yyyy')}</span>
+                &nbsp;·&nbsp;
+                Done: <span className="font-medium">{format(parseISO(task.completed_at), 'MMM d, yyyy')}</span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Completed On-Time Banner */}
+        {task.is_completed && !completedLate && task.completed_at && (
+          <div className="flex items-center gap-3 rounded-lg border border-emerald-400/40 bg-emerald-500/8 dark:bg-emerald-500/10 px-3 py-2.5">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                Completed on time
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Done: <span className="font-medium">{format(parseISO(task.completed_at), 'MMM d, yyyy')}</span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-1">
           {/* Title */}
           <div className="grid gap-2">
             <Label htmlFor="edit-title">Title</Label>
@@ -161,28 +213,41 @@ export function EditTaskDialog({ task, targets = [] }: EditTaskDialogProps) {
 
           {/* Due Date */}
           <div className="grid gap-2">
-            <Label>Due Date</Label>
+            <div className="flex items-center justify-between">
+              <Label>Due Date</Label>
+              {isDueDatePast && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                  <Lock className="h-3 w-3" />
+                  Past date — locked
+                </span>
+              )}
+            </div>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
+                  disabled={isDueDatePast}
                   className={cn(
                     'justify-start text-left font-normal',
-                    !dueDate && 'text-muted-foreground'
+                    !dueDate && 'text-muted-foreground',
+                    isDueDatePast && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {dueDate ? format(dueDate, 'PPP') : 'Pick a date'}
+                  {isDueDatePast && <Lock className="ml-auto h-3.5 w-3.5 text-muted-foreground" />}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dueDate}
-                  onSelect={setDueDate}
-                  initialFocus
-                />
-              </PopoverContent>
+              {!isDueDatePast && (
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dueDate}
+                    onSelect={setDueDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              )}
             </Popover>
           </div>
 

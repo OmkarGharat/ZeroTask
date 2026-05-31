@@ -14,6 +14,7 @@ export interface Task {
   is_completed: boolean
   target_id: string | null
   position: number | null
+  completed_at: string | null
   deleted_at: string | null
   deleted_reason: string | null
   created_at: string
